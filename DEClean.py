@@ -2,7 +2,7 @@ import pandas as pd
 import re
 
 # Load your file (assuming it's a CSV based on the upload)
-file_path = 'LoC14.xlsx - Sheet1.csv'
+file_path = 'LoC14.xlsx'
 
 # We read it as a list of strings first because the structure is irregular
 with open(file_path, 'r', encoding='utf-8') as f:
@@ -54,7 +54,7 @@ for line in lines:
 df = pd.DataFrame(data)
 
 # 4. Clean the "Reason" text (Remove tags)
-df['Reason'] = df['Reason'].str.replace(r'\', '', regex=True).str.strip()
+df['Reason'] = df['Reason'].str.replace(r'\', ', regex=True).str.strip()
 
 # 5. (Bonus) Extract Money mentions using Regex
 def extract_money(text):
