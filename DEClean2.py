@@ -1,25 +1,34 @@
 import pandas as pd
 import re
 import yfinance as yf
+import os
 import time
 
-# --- PART 1: CLEANING THE DATA (Extract & Transform) ---
+# --- PART 1: CLEANING THE DATA ---
 print("Step 1: Reading and Cleaning Data...")
 
-file_path = 'LoC14.csv' # Make sure your file is named this!
+# Get the folder where this script is currently living
+script_dir = os.path.dirname(os.path.abspath(__file__))
+file_path = os.path.join(script_dir, 'LoC14.csv')
+
+print(f"Looking for file at: {file_path}")
+
+if not os.path.exists(file_path):
+    print("ERROR: File not found!")
+    print(f"Please ensure the file is named 'LoC14.csv' and is in: {script_dir}")
+    exit()
 
 with open(file_path, 'r', encoding='utf-8') as f:
     lines = f.readlines()
 
 data = []
 current_tier = None
-# This regex looks for 1-5 capital letters at the start of a line (The Ticker)
 ticker_pattern = re.compile(r'^([A-Z]{1,5}),')
 
 for line in lines:
     line = line.strip()
     
-    # Identify the "Tiers" (The Labels)
+    # Identify Tiers
     if "TIER" in line and "source" in line:
         if "TIER 1" in line: current_tier = "Tier 1: True Allies"
         elif "TIER 2" in line: current_tier = "Tier 2: Battle Tested"
@@ -31,7 +40,6 @@ for line in lines:
     if "Ticker,Company" in line or line.startswith("Proven Receipts") or line == ",,":
         continue
 
-    # Extract Company Data
     match = ticker_pattern.match(line)
     if match:
         parts = line.split(',', 2) 
@@ -43,17 +51,18 @@ for line in lines:
                 'Reason': parts[2]
             })
     elif line and data:
-        # If a line has no ticker, it's a continuation of the previous reason
+        # Continuation of previous line
         data[-1]['Reason'] += " " + line
 
 df = pd.DataFrame(data)
 
-# Clean up the text (Remove tags)
-df['Reason'] = df['Reason'].str.replace(r'\', ', regex=True).str.strip()
+# --- THE FIX IS HERE ---
+# This regex removes text like ""
+# We use r'' to handle backslashes safely
+df['Reason'] = df['Reason'].str.replace(r'', '', regex=True).str.strip()
 
-# Extract Money (The "Quantifier" part)
+# Extract Money
 def extract_money(text):
-    # Finds $120M, $1B, etc.
     match = re.search(r'\$(\d+(?:\.\d+)?)\s*(M|B|Million|Billion)', text, re.IGNORECASE)
     if match:
         amount = float(match.group(1))
@@ -66,7 +75,7 @@ df['Committed_Capital'] = df['Reason'].apply(extract_money)
 
 print(f"Data Cleaned! Found {len(df)} companies.")
 
-# --- PART 2: THE ENRICHMENT (Adding Yahoo Finance Data) ---
+# --- PART 2: ENRICHMENT (Yahoo Finance) ---
 print("Step 2: Enriching with Market Data (This may take 2-3 minutes)...")
 
 tickers = df['Ticker'].tolist()
@@ -75,21 +84,18 @@ industries = []
 current_prices = []
 market_caps = []
 
-# We loop through tickers to get live data
-# (Batching is faster, but looping is safer for error handling on small lists)
+# Loop through tickers
 for ticker in tickers:
     try:
+        # Check if ticker is valid string
+        if not isinstance(ticker, str) or len(ticker) < 1:
+            raise ValueError("Invalid Ticker")
+
+        # Create Ticker object
         stock = yf.Ticker(ticker)
-        # Fast info fetch
-        info = stock.fast_info 
         
-        # Sometimes fast_info doesn't have sector, so we check standard info if needed
-        # But for speed, we will try to stick to basics or handle missing data gracefully
-        
-        # Note: yfinance can be tricky. We will try to get metadata.
-        # If fast_info fails, we might need stock.info (slower)
-        
-        # Let's use stock.info for sector/industry (slower but accurate)
+        # We use .info to get sector/industry. 
+        # Note: If you get errors here, it's usually network related or bad ticker
         meta = stock.info
         
         sectors.append(meta.get('sector', 'Unknown'))
@@ -98,20 +104,22 @@ for ticker in tickers:
         market_caps.append(meta.get('marketCap', 0))
         
         print(f"Fetched: {ticker}")
+        
     except Exception as e:
+        # If fetch fails, fill with dummy data so script doesn't crash
         print(f"Could not fetch {ticker}: {e}")
         sectors.append('Unknown')
         industries.append('Unknown')
         current_prices.append(0)
         market_caps.append(0)
 
-# Add new columns to our DataFrame
+# Assign lists to DataFrame columns
 df['Sector'] = sectors
 df['Industry'] = industries
 df['Stock_Price'] = current_prices
 df['Market_Cap'] = market_caps
 
-# --- PART 3: SAVE THE FINAL FILE ---
-output_filename = 'Final_Project_Data.csv'
+# --- PART 3: SAVE ---
+output_filename = os.path.join(script_dir, 'Final_Project_Data.csv')
 df.to_csv(output_filename, index=False)
-print(f"SUCCESS! File saved as {output_filename}. Ready for Power BI.")
+print(f"SUCCESS! File saved as: {output_filename}")

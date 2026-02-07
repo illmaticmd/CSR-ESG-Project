@@ -54,7 +54,7 @@ for line in lines:
 df = pd.DataFrame(data)
 
 # 4. Clean the "Reason" text (Remove tags)
-df['Reason'] = df['Reason'].str.replace(r'\', ', regex=True).str.strip()
+df['Reason'] = df['Reason'].str.replace(r'', '', regex=True).str.strip()
 
 # 5. (Bonus) Extract Money mentions using Regex
 def extract_money(text):
